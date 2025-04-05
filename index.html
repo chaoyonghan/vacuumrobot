@@ -16,6 +16,7 @@
             max-width: 100%;
             overflow-x: hidden;
             margin: 0;
+            touch-action: manipulation; /* Improve touch behavior */
         }
         
         /* Start Page Styles */
@@ -41,6 +42,40 @@
             text-shadow: 3px 3px 6px rgba(0,0,0,0.2);
             animation: float 3s infinite ease-in-out;
             text-align: center;
+        }
+        
+        /* Robot Color Selection Styles */
+        .color-selection {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .color-option {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 4px solid transparent;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .color-option:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.25);
+        }
+        
+        .color-option.selected {
+            border: 4px solid gold;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+        
+        .color-option img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
         }
         
         .play-button {
@@ -361,6 +396,23 @@
     <!-- Start Page -->
     <div class="start-page" id="start-page">
         <h1 class="start-title">Vacuum Robot Game</h1>
+        
+        <!-- Color Selection -->
+        <div class="color-selection" id="color-selection">
+            <div class="color-option selected" data-color="light-blue">
+                <img src="/api/placeholder/80/80" alt="Light Blue Robot" id="light-blue-img">
+            </div>
+            <div class="color-option" data-color="dark-blue">
+                <img src="/api/placeholder/80/80" alt="Dark Blue Robot" id="dark-blue-img">
+            </div>
+            <div class="color-option" data-color="pink">
+                <img src="/api/placeholder/80/80" alt="Pink Robot" id="pink-img">
+            </div>
+            <div class="color-option" data-color="light-green">
+                <img src="/api/placeholder/80/80" alt="Light Green Robot" id="light-green-img">
+            </div>
+        </div>
+        
         <button class="play-button" id="play-button">PLAY</button>
     </div>
     
@@ -425,19 +477,29 @@
         const MOVE_DELAY = 1200; // milliseconds between command execution
         
         let score = 0;
+        let selectedRobotColor = 'light-blue'; // Default color
         
         let robot = {
             x: 0,
             y: 0,
             direction: 'right', // 'up', 'right', 'down', 'left'
             element: null,
-            isMoving: false
+            isMoving: false,
+            color: selectedRobotColor
         };
         
         let messes = [];
         let obstacles = []; // New array to track obstacles
         let commandSequence = [];
         let isRunning = false;
+        
+        // Robot colors
+        const robotColors = {
+            'light-blue': 'images/vacuumrobot-lightblue.png',
+            'dark-blue': 'images/vacuumrobot-darkblue.png',
+            'pink': 'images/vacuumrobot-pink.png',
+            'light-green': 'images/vacuumrobot-lightgreen.png'
+        };
         
         // Visual resources using local image files
         const messImages = [
@@ -455,8 +517,44 @@
             'images/toy.png'  // Toy
         ];
         
+        // Set up color selection functionality
+        function setupColorSelection() {
+            const colorOptions = document.querySelectorAll('.color-option');
+            
+            // Set robot images for color options
+            document.getElementById('light-blue-img').src = 'images/vacuumrobot-lightblue.png';
+            document.getElementById('dark-blue-img').src = 'images/vacuumrobot-darkblue.png';
+            document.getElementById('pink-img').src = 'images/vacuumrobot-pink.png';
+            document.getElementById('light-green-img').src = 'images/vacuumrobot-lightgreen.png';
+            
+            colorOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    // Remove selected class from all options
+                    colorOptions.forEach(opt => opt.classList.remove('selected'));
+                    
+                    // Add selected class to clicked option
+                    this.classList.add('selected');
+                    
+                    // Update selected color
+                    selectedRobotColor = this.dataset.color;
+                    
+                    // Apply a bounce animation
+                    this.classList.add('bounce');
+                    setTimeout(() => {
+                        this.classList.remove('bounce');
+                    }, 500);
+                });
+            });
+        }
+        
+        // Initialize color selection when the page loads
+        document.addEventListener('DOMContentLoaded', setupColorSelection);
+        
         // Play button to start the game
         document.getElementById('play-button').addEventListener('click', function() {
+            // Save the selected color before transitioning
+            robot.color = selectedRobotColor;
+            
             // Hide start page with a fade effect
             const startPage = document.getElementById('start-page');
             startPage.style.opacity = 0;
@@ -536,9 +634,9 @@
                 robot.element = document.createElement('div');
                 robot.element.className = 'robot';
                 
-                // Use the provided image file
+                // Use the selected color for the robot image
                 const robotImg = document.createElement('img');
-                robotImg.src = 'images/vacuumrobot.png';
+                robotImg.src = robotColors[robot.color]; // Use the selected color
                 robotImg.alt = 'Vacuum Robot';
                 robotImg.style.width = '70px';
                 robotImg.style.height = '70px';
@@ -546,6 +644,10 @@
                 robotImg.style.transform = 'rotate(90deg)'; // Rotate the image 90° clockwise
                 
                 robot.element.appendChild(robotImg);
+            } else {
+                // Update the robot image to match the selected color
+                const robotImg = robot.element.querySelector('img');
+                robotImg.src = robotColors[robot.color];
             }
             
             updateRobotPosition();
@@ -713,11 +815,86 @@
             }
         }
         
-        // Set up drag and drop functionality
+        // Set up drag and drop functionality with touch support
         function setupDragAndDrop() {
             const commands = document.querySelectorAll('.command');
             const slots = document.querySelectorAll('.slot');
+            let draggedElement = null;
+            let touchDragClone = null;
+            let currentTouchedSlot = null;
+            let startX, startY;
             
+            // Helper function to add command to a slot
+            function addCommandToSlot(slot, commandType) {
+                const index = parseInt(slot.dataset.index);
+                
+                // Clear existing command in this slot
+                while (slot.firstChild) {
+                    slot.removeChild(slot.firstChild);
+                }
+                
+                // Add new command
+                const commandImg = document.createElement('img');
+                commandImg.style.width = '35px';
+                commandImg.style.height = '35px';
+                
+                switch (commandType) {
+                    case 'forward':
+                        commandImg.src = 'images/forward.png';
+                        commandImg.alt = '↑';
+                        break;
+                    case 'left':
+                        commandImg.src = 'images/left.png';
+                        commandImg.alt = '←';
+                        break;
+                    case 'right':
+                        commandImg.src = 'images/right.png';
+                        commandImg.alt = '→';
+                        break;
+                    case 'uturn':
+                        commandImg.src = 'images/uturn.png';
+                        commandImg.alt = '↺';
+                        break;
+                    case 'clean':
+                        commandImg.src = 'images/clean.png';
+                        commandImg.alt = '✓';
+                        break;
+                }
+                
+                slot.appendChild(commandImg);
+                slot.classList.add('filled');
+                slot.dataset.command = commandType;
+                
+                // Update command sequence
+                commandSequence[index] = commandType;
+                
+                // Show animation feedback
+                slot.classList.add('bounce');
+                setTimeout(() => {
+                    slot.classList.remove('bounce');
+                }, 500);
+            }
+            
+            // Helper function to create a visual clone for touch dragging
+            function createDragClone(element) {
+                const rect = element.getBoundingClientRect();
+                const clone = element.cloneNode(true);
+                
+                clone.style.position = 'fixed';
+                clone.style.left = `${rect.left}px`;
+                clone.style.top = `${rect.top}px`;
+                clone.style.width = `${rect.width}px`;
+                clone.style.height = `${rect.height}px`;
+                clone.style.zIndex = '1000';
+                clone.style.opacity = '0.8';
+                clone.style.pointerEvents = 'none'; // So it doesn't interfere with touch events
+                clone.style.boxShadow = '0 5px 15px rgba(0,0,0,0.2)';
+                
+                document.body.appendChild(clone);
+                return clone;
+            }
+            
+            // Mouse events for drag and drop
             commands.forEach(command => {
                 command.addEventListener('dragstart', e => {
                     e.dataTransfer.setData('text/plain', command.dataset.type);
@@ -744,53 +921,7 @@
                 slot.addEventListener('drop', e => {
                     e.preventDefault();
                     const commandType = e.dataTransfer.getData('text/plain');
-                    const index = parseInt(slot.dataset.index);
-                    
-                    // Clear existing command in this slot
-                    while (slot.firstChild) {
-                        slot.removeChild(slot.firstChild);
-                    }
-                    
-                    // Add new command
-                    const commandImg = document.createElement('img');
-                    commandImg.style.width = '35px';
-                    commandImg.style.height = '35px';
-                    
-                    switch (commandType) {
-                        case 'forward':
-                            commandImg.src = 'images/forward.png';
-                            commandImg.alt = '↑';
-                            break;
-                        case 'left':
-                            commandImg.src = 'images/left.png';
-                            commandImg.alt = '←';
-                            break;
-                        case 'right':
-                            commandImg.src = 'images/right.png';
-                            commandImg.alt = '→';
-                            break;
-                        case 'uturn':
-                            commandImg.src = 'images/uturn.png';
-                            commandImg.alt = '↺';
-                            break;
-                        case 'clean':
-                            commandImg.src = 'images/clean.png';
-                            commandImg.alt = '✓';
-                            break;
-                    }
-                    
-                    slot.appendChild(commandImg);
-                    slot.classList.add('filled');
-                    slot.dataset.command = commandType;
-                    
-                    // Update command sequence
-                    commandSequence[index] = commandType;
-                    
-                    // Show animation feedback
-                    slot.classList.add('bounce');
-                    setTimeout(() => {
-                        slot.classList.remove('bounce');
-                    }, 500);
+                    addCommandToSlot(slot, commandType);
                 });
                 
                 // Double click to remove command
@@ -807,6 +938,137 @@
                     const index = parseInt(slot.dataset.index);
                     commandSequence[index] = null;
                 });
+                
+                // Touch event for double tap to remove (for touch devices)
+                let lastTap = 0;
+                slot.addEventListener('touchend', (e) => {
+                    // Only handle if it's a quick tap, not a drag
+                    if (!touchDragClone && slot.classList.contains('filled')) {
+                        const currentTime = new Date().getTime();
+                        const tapLength = currentTime - lastTap;
+                        if (tapLength < 300 && tapLength > 0) {
+                            // Double tap detected
+                            e.preventDefault(); // Prevent zoom and other gestures
+                            
+                            // Clear slot (same as double click handler)
+                            while (slot.firstChild) {
+                                slot.removeChild(slot.firstChild);
+                            }
+                            
+                            slot.classList.remove('filled');
+                            delete slot.dataset.command;
+                            
+                            // Update command sequence
+                            const index = parseInt(slot.dataset.index);
+                            commandSequence[index] = null;
+                        }
+                        lastTap = currentTime;
+                    }
+                });
+            });
+            
+            // Touch events for drag and drop
+            commands.forEach(command => {
+                command.addEventListener('touchstart', (e) => {
+                    if (isRunning) return; // Don't allow dragging while game is running
+                    
+                    // Store initial position
+                    const touch = e.touches[0];
+                    startX = touch.clientX;
+                    startY = touch.clientY;
+                    
+                    // Mark this command as being dragged
+                    draggedElement = command;
+                }, { passive: false });
+            });
+            
+            // Add touch move to the document to track dragging
+            document.addEventListener('touchmove', (e) => {
+                if (!draggedElement) return;
+                
+                e.preventDefault(); // Prevent scrolling while dragging
+                
+                const touch = e.touches[0];
+                const moveX = touch.clientX - startX;
+                const moveY = touch.clientY - startY;
+                
+                // If movement is significant, create a visual clone if not already
+                if (!touchDragClone && (Math.abs(moveX) > 10 || Math.abs(moveY) > 10)) {
+                    touchDragClone = createDragClone(draggedElement);
+                    draggedElement.style.opacity = '0.4'; // Dim the original
+                }
+                
+                // Move the clone with the touch
+                if (touchDragClone) {
+                    touchDragClone.style.left = `${touch.clientX - touchDragClone.offsetWidth / 2}px`;
+                    touchDragClone.style.top = `${touch.clientY - touchDragClone.offsetHeight / 2}px`;
+                    
+                    // Check if we're over a slot
+                    const prevTouchedSlot = currentTouchedSlot;
+                    currentTouchedSlot = null;
+                    
+                    // Reset previous slot if it exists
+                    if (prevTouchedSlot) {
+                        prevTouchedSlot.style.backgroundColor = '';
+                    }
+                    
+                    // Find if we're over a slot
+                    slots.forEach(slot => {
+                        const rect = slot.getBoundingClientRect();
+                        if (
+                            touch.clientX >= rect.left && 
+                            touch.clientX <= rect.right && 
+                            touch.clientY >= rect.top && 
+                            touch.clientY <= rect.bottom
+                        ) {
+                            slot.style.backgroundColor = '#e7f5ff'; // Highlight
+                            currentTouchedSlot = slot;
+                        }
+                    });
+                }
+            }, { passive: false });
+            
+            // Touch end to finish the drag
+            document.addEventListener('touchend', (e) => {
+                if (!draggedElement) return;
+                
+                // If we have a clone and are over a slot, "drop" the command
+                if (touchDragClone && currentTouchedSlot) {
+                    addCommandToSlot(currentTouchedSlot, draggedElement.dataset.type);
+                    currentTouchedSlot.style.backgroundColor = '';
+                }
+                
+                // Clean up
+                if (touchDragClone) {
+                    document.body.removeChild(touchDragClone);
+                    touchDragClone = null;
+                }
+                
+                if (draggedElement) {
+                    draggedElement.style.opacity = '1';
+                    draggedElement = null;
+                }
+                
+                currentTouchedSlot = null;
+            });
+            
+            // Touch cancel to abort the drag
+            document.addEventListener('touchcancel', (e) => {
+                // Clean up everything
+                if (touchDragClone) {
+                    document.body.removeChild(touchDragClone);
+                    touchDragClone = null;
+                }
+                
+                if (draggedElement) {
+                    draggedElement.style.opacity = '1';
+                    draggedElement = null;
+                }
+                
+                if (currentTouchedSlot) {
+                    currentTouchedSlot.style.backgroundColor = '';
+                    currentTouchedSlot = null;
+                }
             });
         }
         
@@ -831,10 +1093,11 @@
             isRunning = true;
             document.getElementById('start-button').disabled = true;
             
-            // Disable drag and drop during execution
+            // Disable drag and drop during execution for both mouse and touch
             document.querySelectorAll('.command').forEach(cmd => {
                 cmd.setAttribute('draggable', 'false');
                 cmd.style.cursor = 'default';
+                cmd.style.touchAction = 'auto'; // Disable touch events for dragging during execution
             });
             
             executeCommands();
@@ -1055,10 +1318,11 @@
             isRunning = false;
             document.getElementById('start-button').disabled = false;
             
-            // Re-enable drag and drop
+            // Re-enable drag and drop for mouse and touch
             document.querySelectorAll('.command').forEach(cmd => {
                 cmd.setAttribute('draggable', 'true');
                 cmd.style.cursor = 'grab';
+                cmd.style.touchAction = 'none'; // Enable touch events for dragging
             });
             
             // Remove highlighting
