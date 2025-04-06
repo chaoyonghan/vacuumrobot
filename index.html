@@ -35,6 +35,32 @@
             transition: opacity 0.5s ease-in-out;
         }
         
+        /* Sound toggle button */
+        .sound-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            background-color: white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+        }
+        
+        .sound-toggle:hover {
+            transform: scale(1.1);
+        }
+        
+        .sound-toggle img {
+            width: 24px;
+            height: 24px;
+        }
+        
         .start-title {
             font-size: 72px;
             color: #4dabf7;
@@ -397,6 +423,11 @@
     <div class="start-page" id="start-page">
         <h1 class="start-title">Vacuum Robot Game</h1>
         
+        <!-- Sound toggle button -->
+        <div class="sound-toggle" id="sound-toggle">
+            <img src="/api/placeholder/24/24" alt="Sound" id="sound-icon">
+        </div>
+        
         <!-- Color Selection -->
         <div class="color-selection" id="color-selection">
             <div class="color-option selected" data-color="light-blue">
@@ -478,6 +509,159 @@
         
         let score = 0;
         let selectedRobotColor = 'light-blue'; // Default color
+        let soundEnabled = true; // Sound is enabled by default
+        
+        // Sound effects - preload with fallback method
+        const sounds = {};
+        const soundCache = {}; // Cache for pre-created Audio objects
+        
+        // Function to create and load sounds with multiple approaches
+        function loadSounds() {
+            const soundFiles = {
+                click: 'sounds/click.mp3',
+                drop: 'sounds/drop.mp3',
+                move: 'sounds/move.mp3',
+                collision: 'sounds/collision.mp3',
+                clean: 'sounds/clean.mp3',
+                score: 'sounds/score.mp3'
+            };
+            
+            // Start audio context on user interaction (to help with autoplay policies)
+            let audioContextStarted = false;
+            document.addEventListener('click', function initAudio() {
+                if (!audioContextStarted) {
+                    // Create an AudioContext to help with browser audio policies
+                    try {
+                        const AudioContext = window.AudioContext || window.webkitAudioContext;
+                        const audioCtx = new AudioContext();
+                        console.log("AudioContext created:", audioCtx.state);
+                        
+                        // Try to resume if suspended
+                        if (audioCtx.state === 'suspended') {
+                            audioCtx.resume().then(() => {
+                                console.log("AudioContext resumed successfully");
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Failed to create AudioContext:", e);
+                    }
+                    
+                    // Initialize sounds on first click
+                    for (const [name, path] of Object.entries(soundFiles)) {
+                        try {
+                            sounds[name] = new Audio(path);
+                            // Force preload
+                            sounds[name].load();
+                            
+                            // Also pre-create some cached Audio objects for faster playing
+                            soundCache[name] = [
+                                new Audio(path),
+                                new Audio(path),
+                                new Audio(path)
+                            ];
+                            
+                            console.log(`Sound initialized on click: ${name}`);
+                        } catch (e) {
+                            console.error(`Failed to initialize sound ${name}:`, e);
+                        }
+                    }
+                    
+                    // Try to play a silent sound to unblock audio
+                    try {
+                        const silentSound = new Audio('data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjEyLjEwMAAAAAAAAAAAAAAA//tUAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV6urq6urq6urq6urq6urq6urq6urq6urq6v////////////////////////////////8AAAAATGF2YzU4LjIxAAAAAAAAAAAAAAAAJAAAAAAAAAAAECBFtDEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP/7dEAAAbNIJIFPeACKeHWPLeEAtEglSW9gAK2ImK3vAARsQEDIxMQELzQAgQMSE59GfxkGfcHmGT/SHf/8wHnf4SPtLv//5gHnGQb/+oEDEo3XIAAAAHAEQTDQMKDQ4S/xU+a+FJt/lAxmYxRk4ZKEpIKCDlQDKSkZ48/+VkdWZycQZ1DbuREmgbKfS2+lJdcCPBsZ9lb0YbzYSdkVzKVc7PDVv/PVvJGK/gg1a+zJGVO5X/yCYLlmCCN1bUCrW7ltfb7WZPSqfb/nVPJ6S6daiRRXZ1fpfzqnj+ikbJWhUOYk98/wgXf/9Zvf2EAAAAAACknEHXEACEAYSLj5YYXP5Yf7lE8HA0FtBK8TGOo8XzfJAGP0yGCGWfgwl2hShRdj9FfLwV5KnU83CkNkFzKQxIW9aXbsvCwHRA74ZAKCxhAxIQSQ1zyQjWnpdwRCDxhRINEDDi5ELzEBBYwgQEJGHCxS7Vj4CCjlx8SmdKK1V1fS0EAGTqcQpqz1f5yzqPQmFOBMALDOmyMbFAw7LSVqzlWBwAfwlmIbr4hI1IVHMGLOFqwADT8z45hy97GAAwIMfD/Xc6SX//5VUMfhE1c////p/M7Of/0EPGVS//71WQUsRBgAAAAAwMDAwQAOw==');
+                        silentSound.volume = 0.01;
+                        silentSound.play();
+                    } catch (e) {
+                        console.warn("Could not play silent sound:", e);
+                    }
+                    
+                    audioContextStarted = true;
+                }
+                document.removeEventListener('click', initAudio);
+            });
+            
+            // Also load them normally as backup
+            for (const [name, path] of Object.entries(soundFiles)) {
+                try {
+                    sounds[name] = new Audio(path);
+                    
+                    // Force preload
+                    sounds[name].load();
+                    
+                    // Log when sound is loaded
+                    sounds[name].addEventListener('canplaythrough', () => {
+                        console.log(`Sound loaded: ${name}`);
+                    }, { once: true });
+                    
+                    // Log errors
+                    sounds[name].addEventListener('error', (e) => {
+                        console.error(`Error loading sound ${name}:`, e);
+                    });
+                } catch (e) {
+                    console.error(`Failed to create sound ${name}:`, e);
+                }
+            }
+            
+            console.log('All sounds initialized');
+        }
+        
+        // Load sounds immediately
+        loadSounds();
+        
+        // Function to play sounds with better debugging and fallback
+        function playSound(soundName) {
+            console.log(`Attempting to play sound: ${soundName}`);
+            
+            if (!soundEnabled) {
+                console.log('Sound is disabled');
+                return;
+            }
+            
+            if (!sounds[soundName]) {
+                console.error(`Sound not found: ${soundName}`);
+                return;
+            }
+            
+            try {
+                // Create a brand new Audio object with direct path reference
+                const soundPath = sounds[soundName].src;
+                console.log(`Playing sound from path: ${soundPath}`);
+                
+                const soundToPlay = new Audio(soundPath);
+                soundToPlay.volume = 0.7;
+                
+                // Log success or error
+                soundToPlay.addEventListener('play', () => {
+                    console.log(`Sound ${soundName} started playing successfully`);
+                });
+                
+                soundToPlay.addEventListener('error', (e) => {
+                    console.error(`Error event on sound ${soundName}:`, e);
+                });
+                
+                // Force play and handle errors
+                const playPromise = soundToPlay.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        console.log(`Sound ${soundName} promise resolved`);
+                    }).catch(e => {
+                        console.error(`Error playing sound ${soundName}:`, e);
+                        
+                        // Try a different approach for mobile
+                        setTimeout(() => {
+                            try {
+                                soundToPlay.play();
+                            } catch (err) {
+                                console.error('Alternative play attempt failed');
+                            }
+                        }, 100);
+                    });
+                }
+            } catch (e) {
+                console.error(`Exception playing sound: ${soundName}`, e);
+            }
+        }
         
         let robot = {
             x: 0,
@@ -529,6 +713,9 @@
             
             colorOptions.forEach(option => {
                 option.addEventListener('click', function() {
+                    // Play click sound
+                    playSound('click');
+                    
                     // Remove selected class from all options
                     colorOptions.forEach(opt => opt.classList.remove('selected'));
                     
@@ -548,10 +735,46 @@
         }
         
         // Initialize color selection when the page loads
-        document.addEventListener('DOMContentLoaded', setupColorSelection);
+        document.addEventListener('DOMContentLoaded', function() {
+            setupColorSelection();
+            setupSoundToggle();
+        });
+        
+        // Set up sound toggle functionality
+        function setupSoundToggle() {
+            const soundToggle = document.getElementById('sound-toggle');
+            const soundIcon = document.getElementById('sound-icon');
+            
+            // Set initial sound icon
+            soundIcon.src = soundEnabled ? 'images/sound-on.png' : 'images/sound-off.png';
+            
+            soundToggle.addEventListener('click', function() {
+                // Toggle sound state
+                soundEnabled = !soundEnabled;
+                
+                // Update icon
+                soundIcon.src = soundEnabled ? 'images/sound-on.png' : 'images/sound-off.png';
+                
+                // Play sound if enabling
+                if (soundEnabled) {
+                    // Force load/reload sounds when enabling
+                    loadSounds();
+                    
+                    // Try playing with a slight delay
+                    setTimeout(() => {
+                        playSound('click');
+                    }, 100);
+                }
+                
+                console.log(`Sound is now ${soundEnabled ? 'enabled' : 'disabled'}`);
+            });
+        }
         
         // Play button to start the game
         document.getElementById('play-button').addEventListener('click', function() {
+            // Play click sound
+            playSound('click');
+            
             // Save the selected color before transitioning
             robot.color = selectedRobotColor;
             
@@ -584,7 +807,10 @@
             document.getElementById('score-value').textContent = score;
             
             // Set up start button
-            document.getElementById('start-button').addEventListener('click', startExecution);
+            document.getElementById('start-button').addEventListener('click', function() {
+                playSound('click'); // Play click sound
+                startExecution();
+            });
             
             // Command icons
             document.getElementById('forward-img').src = 'images/forward.png';
@@ -826,6 +1052,7 @@
             
             // Helper function to add command to a slot
             function addCommandToSlot(slot, commandType) {
+                console.log("Adding command to slot:", commandType);
                 const index = parseInt(slot.dataset.index);
                 
                 // Clear existing command in this slot
@@ -873,6 +1100,11 @@
                 setTimeout(() => {
                     slot.classList.remove('bounce');
                 }, 500);
+                
+                // Explicitly play drop sound here
+                setTimeout(() => {
+                    playSound('drop');
+                }, 10);
             }
             
             // Helper function to create a visual clone for touch dragging
@@ -1034,8 +1266,11 @@
                 
                 // If we have a clone and are over a slot, "drop" the command
                 if (touchDragClone && currentTouchedSlot) {
+                    console.log("Touch drop detected");
                     addCommandToSlot(currentTouchedSlot, draggedElement.dataset.type);
                     currentTouchedSlot.style.backgroundColor = '';
+                    
+                    // Sound is now played in addCommandToSlot
                 }
                 
                 // Clean up
@@ -1143,23 +1378,37 @@
         
         // Execute a single command
         function executeCommand(command) {
-            switch (command) {
-                case 'forward':
-                    moveForward();
-                    break;
-                case 'left':
-                    turnLeft();
-                    break;
-                case 'right':
-                    turnRight();
-                    break;
-                case 'uturn':
-                    turnAround();
-                    break;
-                case 'clean':
-                    clean();
-                    break;
+            console.log(`Executing command: ${command}`);
+            
+            // Pre-play sound based on command type
+            if (command === 'forward' || command === 'left' || command === 'right' || command === 'uturn') {
+                console.log("Playing move sound for command:", command);
+                playSound('move');
+            } else if (command === 'clean') {
+                console.log("Playing clean sound for command:");
+                playSound('clean');
             }
+            
+            // Small delay to let sound start before animation
+            setTimeout(() => {
+                switch (command) {
+                    case 'forward':
+                        moveForward();
+                        break;
+                    case 'left':
+                        turnLeft();
+                        break;
+                    case 'right':
+                        turnRight();
+                        break;
+                    case 'uturn':
+                        turnAround();
+                        break;
+                    case 'clean':
+                        clean();
+                        break;
+                }
+            }, 50);
         }
         
         // Move the robot forward
@@ -1192,6 +1441,10 @@
                 if (obstacleIndex !== -1) {
                     // Hit an obstacle - show collision animation and end execution
                     robot.element.classList.add('collision');
+                    
+                    // Play collision sound
+                    playSound('collision');
+                    
                     setTimeout(() => {
                         robot.element.classList.remove('collision');
                     }, 500);
@@ -1212,6 +1465,10 @@
             } else {
                 // Hit the border, stop execution
                 robot.element.classList.add('collision');
+                
+                // Play collision sound
+                playSound('collision');
+                
                 setTimeout(() => {
                     robot.element.classList.remove('collision');
                 }, 500);
@@ -1296,6 +1553,10 @@
                 // Add score animation
                 const scoreElement = document.getElementById('score-value');
                 scoreElement.classList.add('bounce');
+                
+                // Play score sound
+                playSound('score');
+                
                 setTimeout(() => {
                     scoreElement.classList.remove('bounce');
                 }, 500);
